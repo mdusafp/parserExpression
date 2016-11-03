@@ -2,20 +2,16 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <fstream>
 
 using namespace std;
 //FNV-1a hash, 32-bit
-//for string switch
+//for analysis of string switch
 inline constexpr uint32_t fnv1a(const char* str, uint32_t hash = 2166136261UL) {
     return *str ? fnv1a(str + 1, (hash ^ *str) * 16777619ULL) : hash;
 }
 
-void output(vector<int> &v) {
-    for (int i = 0; i < v.size(); i++)
-        cout << v[i] << ' ';
-    cout << '\n';
-}
-
+//calculation
 string calculate(string &l, string &r, char &sign) {
     string exp = "";
     exp.push_back(sign);
@@ -25,7 +21,12 @@ string calculate(string &l, string &r, char &sign) {
         answer = atoi(l.c_str()) * atoi(r.c_str());
         break;
         case fnv1a("/"):
-        answer = atoi(l.c_str()) / atoi(r.c_str());
+        if (atoi(r.c_str())) { // if second operand zero throw an error
+            answer = atoi(l.c_str()) / atoi(r.c_str());
+        } else {
+            cout << "You try to divide by zero ;(\n";
+            exit(EXIT_FAILURE);
+        }
         break;
         case fnv1a("+"):
         answer = atoi(l.c_str()) + atoi(r.c_str());
@@ -34,43 +35,46 @@ string calculate(string &l, string &r, char &sign) {
         answer = atoi(l.c_str()) - atoi(r.c_str());
         break;
     }
-    cout << "answer = " << answer << '\n';
     exp = to_string(answer);
     return exp;
 }
 
-void move(string &exp, string &leftOp, string &rightOp, vector<int> &signI, int &begL, int &endL, int &begR, int &endR, char prevS) {
-    endL = signI [ signI.size() - 2 ] - 1;
-    begR = signI [ signI.size() - 2 ] + 1;
-    endR = signI [ signI.size() - 1 ] - 1;
-
+void wrapperOfCalculation(string &exp, string &leftOp, string &rightOp, vector<int> &signI, int &begL, int &endL, int &begR, int &endR, char prevS) {
+    // init left and right operand
     leftOp.assign(exp, begL, endL - begL + 1);
-    cout << "left op = " << leftOp << '\n';
     rightOp.assign(exp, begR, endR - begR + 1);
-    cout << "right op = " << rightOp << '\n';
-
+    // calculation
     exp.replace(begL, endR - begL + 1, calculate(leftOp, rightOp, prevS));
-    signI.pop_back();
 }
 
-
+void searchOperand(string &exp, int &endLeftOp, int &begRightOp, int &endRightOp, char &prevS, int indexLeftS, int indexRightS) {
+    endLeftOp = indexLeftS - 1;
+    begRightOp = indexLeftS + 1;
+    endRightOp = indexRightS - 1;
+    prevS = exp[ indexLeftS ];
+}
+// simplification of expression
 string simplification(string &exp) {
-//    init
+    // compare prev sign and next sign and compare their priority
     char prevSign, Sign;
     string leftOperand, rightOperand;
     int begLeftOperand = 0, endLeftOperand, begRightOperand, endRightOperand;
     vector<int> signIndex;
+
     for (int i = 0; i < exp.length(); i++) {
+
         if (exp[i] == '+' || exp[i] == '-' || exp[i] == '/' || exp[i] == '*') {
-
             signIndex.push_back(i);
-            if (signIndex.size() > 1) { // always <= 2
 
+            if (signIndex.size() > 1) { // when we find two sign (always find <= 2)
                 prevSign = exp [ signIndex [ signIndex.size() - 2 ] ];
                 Sign = exp [ signIndex [ signIndex.size() - 1 ] ];
 
                 if (prevSign == '*' || prevSign == '/' || Sign == '+' || Sign == '-') {
-                    move(exp, leftOperand, rightOperand, signIndex, begLeftOperand, endLeftOperand, begRightOperand, endRightOperand, prevSign);
+                    // search index the start and end indices of left and right operands
+                    searchOperand(exp, endLeftOperand, begRightOperand, endRightOperand, prevSign, signIndex [ signIndex.size() - 2 ], signIndex [ signIndex.size() - 1 ]);
+                    // wrapper of calculation
+                    wrapperOfCalculation(exp, leftOperand, rightOperand, signIndex, begLeftOperand, endLeftOperand, begRightOperand, endRightOperand, prevSign);
                     i = 0;
                     signIndex.clear();
                     begLeftOperand = 0;
@@ -79,35 +83,24 @@ string simplification(string &exp) {
                 }
             }
         } else if (i == exp.length() - 1 && signIndex.size() == 1) {// you can copypaste less then there
-            endLeftOperand = signIndex[0] - 1;
-            begRightOperand = signIndex[0] + 1;
-            endRightOperand = exp.length() - 1;
-
-            leftOperand.assign(exp, begLeftOperand, endLeftOperand - begLeftOperand + 1);
-            rightOperand.assign(exp, begRightOperand, endRightOperand - begRightOperand + 1);
-            prevSign = exp[ signIndex[0] ];
-            exp.replace(begLeftOperand, endRightOperand - begLeftOperand + 1, calculate(leftOperand, rightOperand, prevSign));
-
+            searchOperand(exp, endLeftOperand, begRightOperand, endRightOperand, prevSign, signIndex[0], exp.length());
+            wrapperOfCalculation(exp,leftOperand, rightOperand, signIndex, begLeftOperand, endLeftOperand, begRightOperand, endRightOperand, prevSign);
         }
         if (i == exp.length() - 1 && signIndex.size() == 2) {
-            endLeftOperand = signIndex[1] - 1;
-            begRightOperand = signIndex[1] + 1;
-            endRightOperand = exp.length() - 1;
+            searchOperand(exp, endLeftOperand, begRightOperand, endRightOperand, prevSign, signIndex[1], exp.length());
 
-            leftOperand.assign(exp, begLeftOperand, endLeftOperand - begLeftOperand + 1);
-            rightOperand.assign(exp, begRightOperand, endRightOperand - begRightOperand + 1);
-            prevSign = exp[ signIndex[1] ];
-            exp.replace(begLeftOperand, endRightOperand - begLeftOperand + 1, calculate(leftOperand, rightOperand, prevSign));
+            wrapperOfCalculation(exp,leftOperand, rightOperand, signIndex, begLeftOperand, endLeftOperand, begRightOperand, endRightOperand, prevSign);
             i = 0;
             signIndex.clear();
             begLeftOperand = 0;
 
+        } else if (i == exp.length() - 1 && !signIndex.size()) {
+
         }
     }
-    output(signIndex);
     return exp;
 }
-
+// replace the expression between brackets (include brackets) to accounted expression between brackets
 string openBrackets(string &exp, int indexLeft, int indexRight) {
     string curr = "";
     int pos = indexLeft + 1;
@@ -118,7 +111,7 @@ string openBrackets(string &exp, int indexLeft, int indexRight) {
 
     return exp;
 }
-
+// backtrack to last not opened left bracket
 int backTrack(vector<int> &left, vector<int> &right, int &indexLeft) {
     int i;
 
@@ -134,51 +127,94 @@ int backTrack(vector<int> &left, vector<int> &right, int &indexLeft) {
 
 string parser(string &exp) {
     int indexLeft, indexRight;
-    vector<int> left, right;
+    vector<int> leftBrackets, rightBrackets; // vector of index
+
     for (int i = 0; i < exp.length(); i++) {
-                                                                                                                                // crash
-        if (left.size() < right.size()) {
-            cout << "This expression is awesome ;(\n";
+        // crash
+        if (leftBrackets.size() < rightBrackets.size()) { // if we catch right bracket before left throw an error
+            cout << "It's too much right brackets before left brackets ;(\n";
             exit(EXIT_FAILURE);
         }
-
-        if (i == exp.length() - 1 && left.empty()) {
+        // parsing
+        if (i == exp.length() - 1 && leftBrackets.empty()) {
             exp = simplification(exp);
         }
 
         if (exp[i] == '(') {
             indexLeft = i;
-            left.push_back(i);
+            leftBrackets.push_back(i);
         }
 
         if (exp[i] == ')') {
             indexRight = i;
-            right.push_back(i);
-
+            rightBrackets.push_back(i);
+            // replace the expression between brackets (include brackets) to accounted expression between brackets
             exp = openBrackets(exp, indexLeft, indexRight);
-            i = backTrack(left, right, indexLeft);
+            // go back to last brackets
+            i = backTrack(leftBrackets, rightBrackets, indexLeft);
         }
     }
-    cout << "left: ";
-    output(left);
-    cout << "right: ";
-    output(right);
-    if (left.size() != right.size()) {
-        cout << "This expression is awesome ;(\n";
+    // if we have expression without brackets
+    exp = simplification(exp);
+
+    // crash
+    if (leftBrackets.size() != rightBrackets.size()) { // if left brackets more then right brackets when we come to last symbol throw an error
+        cout << "You forgot a pinch of right brackets ;(\n";
         exit(EXIT_FAILURE);
     }
+
     return exp;
 }
 
-int main(int argc, char const *argv[]) {
-    string expression;
+void consoleProcessing(string &exp) {
     int x = 1;
     while (x) {
-        cin >> expression;
-        expression = parser(expression);
-        cout << "expression = " <<  expression << '\n';
-        cout << "continue? ";
+        cout << "Enter the expression: ";
+        cin >> exp;
+        cout << exp << " = "; // before parse
+        exp = parser(exp);
+        cout <<  exp << '\n'; // after parse (answer)
+        cout << "Do you want to continue?\n";
         cin >> x;
     }
+}
+
+void fileProcessing(string &exp) {
+    ifstream in("/home/mfp/QtProjects/Parser/Parser/file.txt");
+    if (!in.is_open()) {
+        cout << "FIle doesn't open\n";
+    } else {
+        while (in) {
+            getline(in, exp);
+            if (exp.empty()) return;
+            cout << exp; // before parse
+            exp = parser(exp);
+            cout << " = " <<  exp << '\n'; // after parse (answer)
+        }
+    }
+}
+
+void menu () {
+    int ch;
+    string expression;
+    do {
+        cout << "1. console processing\n";
+        cout << "2. file processing\n";
+        cout << "0. exit\n";
+        cin >> ch;
+        switch (ch) {
+            case 1:
+            consoleProcessing(expression);
+            break;
+            case 2:
+            fileProcessing(expression);
+            break;
+            case 0: exit(EXIT_SUCCESS);
+        }
+    } while (ch);
+}
+
+int main(int argc, char const *argv[]) {
+    menu();
     return 0;
 }
